@@ -1,3 +1,25 @@
-A basic RadioRA2 python library and demo app
+RadioPY
+Copyleft 2013 Logan Brown
+thinkbrown@gmail.com
 
-TODO Add basic docs
+
+A mostly complete RadioRA2 python library and functioning demo app
+
+Lutron's RadioRA2 lighting system is pretty awesome, but their software clients are mediocre at best, and there are no desktop clients.
+
+--Usage--
+
+In the simplest scenario, you have to at least import the library and then setup a controller and a house. From there, you can run the load funtion on your house, and RadioPY will download and parse the database from the controller.
+
+[example code]
+from radiora import *
+
+radiora = Controller(<IP address>, <username>, <password>)
+house = House(radiora)
+house.load()
+
+--Todo--
+
+- fully implement keypads
+- figure out how to add continuous live feedback
+- And implement it
