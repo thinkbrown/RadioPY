@@ -120,8 +120,8 @@ class Button:
 		self.IntegrationID = IntegrationID
 		self.Controller = Controller
 	def push(self):
-		self.Controller.sendCommand('\x23' + 'DEVICE,' + self.IntegrationID + ',' + self.Number + ',3', False)
-		self.Controller.sendCommand('\x23' + 'DEVICE,' + self.IntegrationID + ',' + self.Number + ',4', False)
+		self.Controller.sendCommand('\x23' + 'DEVICE,' + self.IntegrationID + ',' + str(self.Number) + ',3', False)
+		self.Controller.sendCommand('\x23' + 'DEVICE,' + self.IntegrationID + ',' + str(self.Number) + ',4', False)
 	def getName(self):
 		return self.Engraving
 	def getState(self):
