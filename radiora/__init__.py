@@ -16,8 +16,8 @@ class Controller:
 		tn.read_until("GNET> ")
 		tn.write(commandString + '\r\n')
 		if Feedback:
-			response =  tn.read_until("\n", 1)
-			tn.write('\x1d' + '\r\n')
+			response =  tn.read_until('GNET> ', 1)
+			#tn.write('\x1d' + '\r\n')
 			tn.close()
 			if response == 'GNET> ':
 				return False
@@ -25,9 +25,12 @@ class Controller:
 				return response
 		else:
 			tn.read_until("GNET> ")
-			tn.write('\x1d' + '\r\n')
+			#tn.write('\x1d' + '\r\n')
 			tn.close()
 	def responseParser(self, response):
+		#print '\"%s\"' % response
+		response = response.replace( '\r\nGNET> ', '' )
+		#print '\"%s\"' % response
 		resparray = response.split(',')
 		val = resparray[-1].rstrip()
 		return val
