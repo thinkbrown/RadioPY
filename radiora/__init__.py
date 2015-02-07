@@ -7,6 +7,7 @@ class Controller:
 		self.user = Username
 		self.password = Password
 	def sendCommand(self, commandString, Feedback = True):
+		#print 'sendCommand', commandString
 		tn = telnetlib.Telnet(self.host)
 		tn.read_until('login: ')
 		tn.write(self.user + '\r\n')
@@ -38,6 +39,7 @@ class Controller:
 		return self.xmldata
 class Room:
 	def __init__(self, Name, IntegrationID, Controller):
+		print 'Adding Room:', Name
 		self.Name = Name
 		self.IntegrationID = IntegrationID
 		self.Controller = Controller
@@ -72,6 +74,7 @@ class Room:
 
 class Output:
 	def __init__(self, Name, IntegrationID, Controller):
+		print 'Output:', Name
 		self.Name = Name
 		self.IntegrationID = IntegrationID
 		self.Controller = Controller
@@ -90,6 +93,7 @@ class Output:
 
 class Keypad:
 	def __init__(self, Name, IntegrationID, Controller):
+		print 'Keypad:', Name
 		self.Name = Name
 		self.IntegrationID = IntegrationID
 		self.Buttons = []
@@ -102,10 +106,15 @@ class Keypad:
 		return self.Name
 	def getIntegrationID(self):
 		return self.IntegrationID
+        def getStatus(self):
+                for button in self.Buttons:
+                	print button.getState(), button.getName()
+
 	
 
 class Button:
 	def __init__(self, Engraving, Number, IntegrationID, Controller):
+		print 'Button:', Number, Engraving
 		self.Engraving = Engraving
 		self.Number = Number
 		self.IntegrationID = IntegrationID
@@ -115,6 +124,13 @@ class Button:
 		self.Controller.sendCommand('\x23' + 'DEVICE,' + self.IntegrationID + ',' + self.Number + ',4', False)
 	def getName(self):
 		return self.Engraving
+	def getState(self):
+		rval = False
+		# Getting the button State would be useless, instead look at the state of the led
+		response = self.Controller.sendCommand('?' + 'DEVICE,' + self.IntegrationID + ',' + str(80 + self.Number) + ',9')
+		if response:
+			rval = self.Controller.responseParser(response)
+		return rval
 
 
 class House:
@@ -127,22 +143,32 @@ class House:
 		root = ET.fromstring(self.Controller.getXML())
 		areas = root.find('Areas')[0].find('Areas')
 		for loads in areas:
+			print '\n'
 			newroom = Room(loads.attrib['Name'], loads.attrib['IntegrationID'], self.Controller)
-			for newoutput in loads[3]:
-				newroom.addOutput(Output(newoutput.attrib['Name'], newoutput.attrib['IntegrationID'], self.Controller))
-			for newkeypad in loads[0]:
-				for devicegroup in newkeypad[0]:
-					if devicegroup.tag == 'Device' and devicegroup.attrib['DeviceType'] == 'SEETOUCH_KEYPAD':
-						newkeypad = Keypad(devicegroup.attrib['Name'], devicegroup.attrib['IntegrationID'], self.Controller)
-						for buttons in devicegroup[0]:
-							if buttons.tag == 'Component' and buttons.attrib['ComponentType'] == 'BUTTON':
-								if 'Engraving' in buttons[0].attrib:
-									newkeypad.addButton(Button(buttons[0].attrib['Engraving'], buttons[0].attrib['Name'].split(' ')[-1], newkeypad.getIntegrationID(), self.Controller))
-								else:
-									newkeypad.addButton(Button('Unnamed Button', buttons[0].attrib['Name'].split(' ')[-1], newkeypad.getIntegrationID(), self.Controller))
-						newroom.addKeypad(newkeypad)
+			for output in loads.find('Outputs'):
+				newroom.addOutput(Output(output.attrib['Name'], output.attrib['IntegrationID'], self.Controller))
+			for dg in loads.find('DeviceGroups'):
+				for device in dg.iter('Device'):
+					if device.attrib['DeviceType'] == 'SEETOUCH_KEYPAD':
+						newroom.addKeypad(self.parseKeypad(device))
+					if device.attrib['DeviceType'] == 'HYBRID_SEETOUCH_KEYPAD':
+						newroom.addKeypad(self.parseKeypad(device))
+					if device.attrib['DeviceType'] == 'SEETOUCH_TABLETOP_KEYPAD':
+						newroom.addKeypad(self.parseKeypad(device))
 			self.Rooms.append(newroom)
 
+	def parseKeypad(self, device):
+		newkeypad = Keypad(device.attrib['Name'], device.attrib['IntegrationID'], self.Controller)
+		for comp in device.iter('Component'):
+			if comp.attrib['ComponentType'] == 'BUTTON':
+				button = comp[0]
+				number = int(comp.attrib['ComponentNumber'])
+				if 'ButtonType' in button.attrib and button.attrib['ButtonType'] != 'MasterRaiseLower':
+					name = 'Unnamed Button'		
+					if 'Engraving' in button.attrib:
+						name = button.attrib['Engraving']
+					newkeypad.addButton(Button(name, number, newkeypad.getIntegrationID(), self.Controller))
+		return newkeypad
 
 	def addRoom(self,room):
 		self.Rooms.append(room)
