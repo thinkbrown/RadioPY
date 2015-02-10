@@ -2,29 +2,36 @@ import xml.etree.ElementTree as ET
 import telnetlib
 
 class Controller:
-	def __init__(self, Hostname, Username, Password):
+	def __init__(self, Hostname, Username, Password, persistConn = False):
 		self.host = Hostname
 		self.user = Username
 		self.password = Password
+		self.connected = False
+		self.persistConn = persistConn
+		self.tn = telnetlib.Telnet(self.host)
+	def openConnection(self):
+		self.tn.open(self.host)
+		self.tn.read_until('login: ')
+		self.tn.write(self.user + '\r\n')
+		self.tn.read_until('password: ')
+		self.tn.write(self.password + '\r\n')
+		self.tn.read_until("GNET> ")
+		self.connected = True
 	def sendCommand(self, commandString, Feedback = True):
+		if not self.connected:
+			self.openConnection()
 		#print 'sendCommand', commandString
-		tn = telnetlib.Telnet(self.host)
-		tn.read_until('login: ')
-		tn.write(self.user + '\r\n')
-		tn.read_until('password: ')
-		tn.write(self.password + '\r\n')
-		tn.read_until("GNET> ")
-		tn.write(commandString + '\r\n')
+		self.tn.write(commandString + '\r\n')
 		if Feedback:
-			response =  tn.read_until('GNET> ', 1)
-			tn.close()
+			response =  self.tn.read_until('GNET> ', 1)
 			if response == 'GNET> ':
 				return False
 			else:
 				return response
 		else:
-			tn.read_until("GNET> ")
-			tn.close()
+			self.tn.read_until("GNET> ")
+		if not self.persitConn:
+			self.tn.close()
 	def responseParser(self, response):
 		#print '\"%s\"' % response
 		response = response.replace( '\r\nGNET> ', '' )
