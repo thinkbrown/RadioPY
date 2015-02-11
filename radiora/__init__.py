@@ -110,20 +110,28 @@ class Controller:
 		if resp[2] == '29':   # Skip undocumented output command 
 			return 
 
-		output = self.integID[resp[1]]
-		if resp[2] == '1':  # zone Set
-			print 'ID %d %-20s %-25s now at %3d' % (int(resp[1]), output.getRoom().getName(), output.getName(), int(float(resp[3]))), '%'
+		id = resp[1]
+		if id in self.integID:
+			output = self.integID[id]
+			if resp[2] == '1':  # zone Set
+				print 'ID %d %-20s %-25s now at %3d' % (int(resp[1]), output.getRoom().getName(), output.getName(), int(float(resp[3]))), '%'
+			else:
+				print 'handleOutput', resp
 		else:
 			print 'handleOutput', resp
 	
 	def handleDevice(self, resp):
-		kp = self.integID[resp[1]]
-		if resp[3] == '3':  # button push
-			button = int(resp[2])
-			print 'ID %d %-20s %-25s B%d %s pushed' % (int(resp[1]), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName() )
-		elif resp[3] == '9':  # led change
-			button = int(resp[2])-80  # subtract 80 for led offset
-			print 'ID %d %-20s %-25s B%d %-10s led = %d' % (int(resp[1]), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName(), int(resp[4]))
+		id = resp[1]
+		if id in self.integID:
+			kp = self.integID[id]
+			if resp[3] == '3':  # button push
+				button = int(resp[2])
+				print 'ID %d %-20s %-25s B%d %s pushed' % (int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName() )
+			elif resp[3] == '9':  # led change
+				button = int(resp[2])-80  # subtract 80 for led offset
+				print 'ID %d %-20s %-25s B%d %-10s led = %d' % (int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName(), int(resp[4]))
+			else:
+				print 'handleDevice', resp
 		else:
 			print 'handleDevice', resp
 	
