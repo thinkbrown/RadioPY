@@ -108,7 +108,7 @@ class Controller:
 				elif resparray[0] == 'OUTPUT':
 					self.handleOutput(resparray)
 				else:
-					print '[%] unknown response: \"%s\"' % (timestamp(), resp)
+					print '[%s] unknown response: \"%s\"' % (timestamp(), resp)
 					return
 	 
 	def handleOutput(self, resp):
@@ -122,9 +122,9 @@ class Controller:
 				print '[%s] ID %d %-20s %-25s now at %3d' % \
 				  (timestamp(), int(id), output.getRoom().getName(), output.getName(), int(float(resp[3]))), '%'
 			else:
-				print '[%] Unhandled output' % timestamp(), resp
+				print '[%s] Unhandled output' % timestamp(), resp
 		else:
-			print '[%] Unhandled output' % timestamp(), resp
+			print '[%s] Unhandled output' % timestamp(), resp
 	
 	def handleDevice(self, resp):
 		id = resp[1]
@@ -139,9 +139,9 @@ class Controller:
 				print '[%s] ID %d %-20s %-25s B%d %-10s led = %d' % \
 				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName(), int(resp[4]))
 			else:
-				print '[%] Unhandled device' % timestamp(), resp
+				print '[%s] Unhandled device' % timestamp(), resp
 		else:
-			print '[%] Unhandled device' % timestamp(), resp
+			print '[%s] Unhandled device' % timestamp(), resp
 	
 	def getXML(self):
 		import urllib2
