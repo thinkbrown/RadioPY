@@ -278,6 +278,8 @@ class House:
 						newroom.addKeypad(self.parseKeypad(device, newroom))
 					if device.attrib['DeviceType'] == 'SEETOUCH_TABLETOP_KEYPAD':
 						newroom.addKeypad(self.parseKeypad(device, newroom))
+					if device.attrib['DeviceType'] == 'VISOR_CONTROL_RECEIVER':
+						newroom.addKeypad(self.parseKeypad(device, newroom))
 			self.Rooms.append(newroom)
 
 	def parseKeypad(self, device, newroom):
