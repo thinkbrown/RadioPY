@@ -44,6 +44,7 @@ class TelnetConnection(threading.Thread):
 class Controller:
 	def __init__(self, Hostname, Username, Password, persistConn = False):
 		self.host = Hostname
+		self.integID = {}
 		self.tn = TelnetConnection(Hostname, Username, Password)
 		self.tn.setHandler(self.responseParser)
 		
@@ -81,8 +82,8 @@ class Controller:
 			else:
 				# Otherwise, return the last value, 
 				#which should be the state we are looking for
-				return resp[-1].rstrip() 
-	
+				return resp[-1].rstrip()
+
 	def responseParser(self, resp):
 	        if resp.startswith(('~')):
 			resparray = resp.strip('~').split(',')
@@ -96,11 +97,35 @@ class Controller:
 				handled = True
 			self.cond.release()
 			
-			if not handled: 
-	                	print 'Got Monitor cmd:', resparray
+			if not handled:
+				if resparray[0] == 'DEVICE':
+					self.handleDevice(resparray)
+				elif resparray[0] == 'OUTPUT':
+					self.handleOutput(resparray)
 	        else:
         	        print 'Handler unknown response: \"%s\"' % resp
 			return
+	 
+	def handleOutput(self, resp):
+		if resp[2] == '29':   # Skip undocumented output command 
+			return 
+
+		output = self.integID[resp[1]]
+		if resp[2] == '1':  # zone Set
+			print 'ID %d %-20s %-25s now at %3d' % (int(resp[1]), output.getRoom().getName(), output.getName(), int(float(resp[3]))), '%'
+		else:
+			print 'handleOutput', resp
+	
+	def handleDevice(self, resp):
+		kp = self.integID[resp[1]]
+		if resp[3] == '3':  # button push
+			button = int(resp[2])
+			print 'ID %d %-20s %-25s B%d %s pushed' % (int(resp[1]), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName() )
+		elif resp[3] == '9':  # led change
+			button = int(resp[2])-80  # subtract 80 for led offset
+			print 'ID %d %-20s %-25s B%d %-10s led = %d' % (int(resp[1]), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName(), int(resp[4]))
+		else:
+			print 'handleDevice', resp
 	
 	def getXML(self):
 		import urllib2
@@ -108,6 +133,8 @@ class Controller:
 		self.xmldata = xmlfile.read()
 		xmlfile.close()
 		return self.xmldata
+	def registerIntegId(self, integid, obj):
+		self.integID[integid] = obj
 class Room:
 	def __init__(self, Name, IntegrationID, Controller):
 		print 'Adding Room:', Name
@@ -118,6 +145,7 @@ class Room:
 		self.Keypads = []
 	def addOutput(self, output):
 		self.Outputs.append(output)
+		self.Controller.registerIntegId(output.getIntegrationID(), output)
 	def getOutputs(self):
 		return self.Outputs
 	def findOutput(self, Name):
@@ -144,15 +172,18 @@ class Room:
 
 
 class Output:
-	def __init__(self, Name, IntegrationID, Controller):
+	def __init__(self, Name, IntegrationID, Controller, Room):
 		print 'Output:', Name
 		self.Name = Name
 		self.IntegrationID = IntegrationID
 		self.Controller = Controller
+		self.Room = Room
 	def Set(self, level):
 		self.Controller.sendCommand('\x23' + 'OUTPUT,' + str(self.IntegrationID) + ',1,' + str(level))
 	def getName(self):
 		return self.Name
+	def getRoom(self):
+		return self.Room
 	def getIntegrationID(self):
 		return self.IntegrationID
 	def Get(self):
@@ -163,24 +194,29 @@ class Output:
 		else: return 'No Response'
 
 class Keypad:
-	def __init__(self, Name, IntegrationID, Controller):
+	def __init__(self, Name, IntegrationID, Controller, Room):
 		print 'Keypad:', Name
 		self.Name = Name
 		self.IntegrationID = IntegrationID
 		self.Buttons = []
 		self.Controller = Controller
+		self.Controller.registerIntegId(self.IntegrationID, self)
+		self.Room = Room
 	def addButton(self, button):
 		self.Buttons.append(button)
 	def getButtons(self):
 		return self.Buttons
 	def getName(self):
 		return self.Name
+	def getRoom(self):
+		return self.Room
 	def getIntegrationID(self):
 		return self.IntegrationID
         def getStatus(self):
                 for button in self.Buttons:
                 	print button.getState(), button.getName()
-
+	def findButton(self,num):
+		return self.Buttons[num]
 	
 
 class Button:
@@ -217,19 +253,19 @@ class House:
 			print '\n'
 			newroom = Room(loads.attrib['Name'], loads.attrib['IntegrationID'], self.Controller)
 			for output in loads.find('Outputs'):
-				newroom.addOutput(Output(output.attrib['Name'], output.attrib['IntegrationID'], self.Controller))
+				newroom.addOutput(Output(output.attrib['Name'], output.attrib['IntegrationID'], self.Controller, newroom))
 			for dg in loads.find('DeviceGroups'):
 				for device in dg.iter('Device'):
 					if device.attrib['DeviceType'] == 'SEETOUCH_KEYPAD':
-						newroom.addKeypad(self.parseKeypad(device))
+						newroom.addKeypad(self.parseKeypad(device, newroom))
 					if device.attrib['DeviceType'] == 'HYBRID_SEETOUCH_KEYPAD':
-						newroom.addKeypad(self.parseKeypad(device))
+						newroom.addKeypad(self.parseKeypad(device, newroom))
 					if device.attrib['DeviceType'] == 'SEETOUCH_TABLETOP_KEYPAD':
-						newroom.addKeypad(self.parseKeypad(device))
+						newroom.addKeypad(self.parseKeypad(device, newroom))
 			self.Rooms.append(newroom)
 
-	def parseKeypad(self, device):
-		newkeypad = Keypad(device.attrib['Name'], device.attrib['IntegrationID'], self.Controller)
+	def parseKeypad(self, device, newroom):
+		newkeypad = Keypad(device.attrib['Name'], device.attrib['IntegrationID'], self.Controller, newroom)
 		for comp in device.iter('Component'):
 			if comp.attrib['ComponentType'] == 'BUTTON':
 				button = comp[0]
@@ -263,7 +299,8 @@ class House:
 	def getStatus(self):
 		for room in self.Rooms:
 			for output in room.getOutputs():
-				print output.getName(),': ', output.Get(), '%'
+				#print output.getName(),': ', output.Get(), '%'
+				print '%25s : %3d' % (output.getName(), output.Get()), '%'
 	def Shutdown(self):
 		for room in self.Rooms:
 			for output in room.getOutputs():
