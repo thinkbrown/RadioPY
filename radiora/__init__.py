@@ -133,11 +133,11 @@ class Controller:
 			if resp[3] == '3':  # button push
 				button = int(resp[2])
 				print '[%s] ID %d %-20s %-25s B%d %s pushed' % \
-				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName() )
+				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button).getName() )
 			elif resp[3] == '9':  # led change
 				button = int(resp[2])-80  # subtract 80 for led offset
 				print '[%s] ID %d %-20s %-25s B%d %-10s led = %d' % \
-				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName(), int(resp[4]))
+				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button).getName(), int(resp[4]))
 			else:
 				print '[%s] Unhandled device' % timestamp(), resp
 		else:
@@ -214,12 +214,12 @@ class Keypad:
 		print 'Keypad:', Name
 		self.Name = Name
 		self.IntegrationID = IntegrationID
-		self.Buttons = []
+		self.Buttons = {}
 		self.Controller = Controller
 		self.Controller.registerIntegId(self.IntegrationID, self)
 		self.Room = Room
-	def addButton(self, button):
-		self.Buttons.append(button)
+	def addButton(self, num, button):
+		self.Buttons[num] = button
 	def getButtons(self):
 		return self.Buttons
 	def getName(self):
@@ -232,7 +232,7 @@ class Keypad:
                 for button in self.Buttons:
                 	print button.getState(), button.getName()
 	def findButton(self,num):
-		return self.Buttons[num]
+		return self.Buttons.get(num)
 	
 
 class Button:
@@ -292,7 +292,7 @@ class House:
 					name = 'Unnamed Button'		
 					if 'Engraving' in button.attrib:
 						name = button.attrib['Engraving']
-					newkeypad.addButton(Button(name, number, newkeypad.getIntegrationID(), self.Controller))
+					newkeypad.addButton(number, Button(name, number, newkeypad.getIntegrationID(), self.Controller))
 		return newkeypad
 
 	def addRoom(self,room):
