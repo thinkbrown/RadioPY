@@ -1,15 +1,17 @@
 import xml.etree.ElementTree as ET
 import telnetlib
+import threading
 
-class Controller:
-	def __init__(self, Hostname, Username, Password, persistConn = False):
+class TelnetConnection(threading.Thread):
+	def __init__(self, Hostname, Username, Password):
+		threading.Thread.__init__(self)
 		self.host = Hostname
 		self.user = Username
 		self.password = Password
 		self.connected = False
-		self.persistConn = persistConn
+		self.handler = None
 		self.tn = telnetlib.Telnet(self.host)
-	def openConnection(self):
+	def open(self):
 		self.tn.open(self.host)
 		self.tn.read_until('login: ')
 		self.tn.write(self.user + '\r\n')
@@ -17,28 +19,89 @@ class Controller:
 		self.tn.write(self.password + '\r\n')
 		self.tn.read_until("GNET> ")
 		self.connected = True
-	def sendCommand(self, commandString, Feedback = True):
+		self.start()
+	def close(self):
+		self.connected = False
+		self.join()
+		self.tn.close()
+	def isConnected(self):
+		return self.connected
+	def setHandler(self, handler):
+		self.handler = handler 
+	def send(self, string):
 		if not self.connected:
 			self.openConnection()
+		self.tn.write(string + '\r\n')
+	def run(self):
+		while self.connected:
+			response = self.tn.read_until('\r\n', 1)
+			if response:
+				response = response.replace( '\r\n', '' )
+				response = response.replace( 'GNET> ', '' )
+				if self.handler is not None:
+					self.handler(response)
+
+class Controller:
+	def __init__(self, Hostname, Username, Password, persistConn = False):
+		self.host = Hostname
+		self.tn = TelnetConnection(Hostname, Username, Password)
+		self.tn.setHandler(self.responseParser)
+		
+		self.cond = threading.Condition()
+		# condition var protects these 2 values
+		self.expectedId = None
+		self.requestedResp = None
+	def close(self):
+		self.tn.close()
+	def sendCommand(self, commandString, Feedback = True):
+		if not self.tn.isConnected():
+			self.tn.open()
 		#print 'sendCommand', commandString
-		self.tn.write(commandString + '\r\n')
+		self.waitIntegID = None
+		self.tn.send(commandString)
+		
+		# If we are expecting a response, we need to lock
+		# and wait for the parser to get the response for us
 		if Feedback:
-			response =  self.tn.read_until('GNET> ', 1)
-			if response == 'GNET> ':
+			self.cond.acquire()
+			self.requestedResp = None  # Clear any previous
+			self.expectedId = commandString.split(',')[1]			
+			#print 'Waiting for id', self.expectedId 
+			resp = None
+			while True:
+				if self.requestedResp:
+					resp = self.requestedResp
+					break;
+				self.cond.wait(1)
+			self.expectedId = None
+			self.cond.release()
+
+			if not resp:  # If we timed out, there is no response
 				return False
 			else:
-				return response
-		else:
-			self.tn.read_until("GNET> ")
-		if not self.persitConn:
-			self.tn.close()
-	def responseParser(self, response):
-		#print '\"%s\"' % response
-		response = response.replace( '\r\nGNET> ', '' )
-		#print '\"%s\"' % response
-		resparray = response.split(',')
-		val = resparray[-1].rstrip()
-		return val
+				# Otherwise, return the last value, 
+				#which should be the state we are looking for
+				return resp[-1].rstrip() 
+	
+	def responseParser(self, resp):
+	        if resp.startswith(('~')):
+			resparray = resp.strip('~').split(',')
+			handled = False
+        		
+			# Lock, and check if we are waiting for this reponse
+			self.cond.acquire()
+			if self.expectedId:
+				self.requestedResp = resparray
+				self.cond.notify()
+				handled = True
+			self.cond.release()
+			
+			if not handled: 
+	                	print 'Got Monitor cmd:', resparray
+	        else:
+        	        print 'Handler unknown response: \"%s\"' % resp
+			return
+	
 	def getXML(self):
 		import urllib2
 		xmlfile = urllib2.urlopen('http://' + self.host + '/DbXmlInfo.xml')
@@ -95,7 +158,7 @@ class Output:
 	def Get(self):
 		response = self.Controller.sendCommand('?' + 'OUTPUT,' + str(self.IntegrationID) + ',1')
 		if response:
-			level = int(float(self.Controller.responseParser(response)))
+			level = int(float(response))
 			return level
 		else: return 'No Response'
 
