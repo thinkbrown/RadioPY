@@ -1,6 +1,11 @@
 import xml.etree.ElementTree as ET
 import telnetlib
 import threading
+import datetime
+
+def timestamp():
+	return str(datetime.datetime.now()).split('.')[0]
+
 
 class TelnetConnection(threading.Thread):
 	def __init__(self, Hostname, Username, Password):
@@ -102,9 +107,9 @@ class Controller:
 					self.handleDevice(resparray)
 				elif resparray[0] == 'OUTPUT':
 					self.handleOutput(resparray)
-	        else:
-        	        print 'Handler unknown response: \"%s\"' % resp
-			return
+				else:
+					print '[%] unknown response: \"%s\"' % (timestamp(), resp)
+					return
 	 
 	def handleOutput(self, resp):
 		if resp[2] == '29':   # Skip undocumented output command 
@@ -114,11 +119,12 @@ class Controller:
 		if id in self.integID:
 			output = self.integID[id]
 			if resp[2] == '1':  # zone Set
-				print 'ID %d %-20s %-25s now at %3d' % (int(resp[1]), output.getRoom().getName(), output.getName(), int(float(resp[3]))), '%'
+				print '[%s] ID %d %-20s %-25s now at %3d' % \
+				  (timestamp(), int(id), output.getRoom().getName(), output.getName(), int(float(resp[3]))), '%'
 			else:
-				print 'handleOutput', resp
+				print '[%] Unhandled output' % timestamp(), resp
 		else:
-			print 'handleOutput', resp
+			print '[%] Unhandled output' % timestamp(), resp
 	
 	def handleDevice(self, resp):
 		id = resp[1]
@@ -126,14 +132,16 @@ class Controller:
 			kp = self.integID[id]
 			if resp[3] == '3':  # button push
 				button = int(resp[2])
-				print 'ID %d %-20s %-25s B%d %s pushed' % (int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName() )
+				print '[%s] ID %d %-20s %-25s B%d %s pushed' % \
+				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName() )
 			elif resp[3] == '9':  # led change
 				button = int(resp[2])-80  # subtract 80 for led offset
-				print 'ID %d %-20s %-25s B%d %-10s led = %d' % (int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName(), int(resp[4]))
+				print '[%s] ID %d %-20s %-25s B%d %-10s led = %d' % \
+				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button-1).getName(), int(resp[4]))
 			else:
-				print 'handleDevice', resp
+				print '[%] Unhandled device' % timestamp(), resp
 		else:
-			print 'handleDevice', resp
+			print '[%] Unhandled device' % timestamp(), resp
 	
 	def getXML(self):
 		import urllib2
