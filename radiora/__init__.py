@@ -138,6 +138,8 @@ class Controller:
 				button = int(resp[2])-80  # subtract 80 for led offset
 				print '[%s] ID %d %-20s %-25s B%d %-10s led = %d' % \
 				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button).getName(), int(resp[4]))
+			elif resp[3] == '4':  # button release
+				return
 			else:
 				print '[%s] Unhandled device' % timestamp(), resp
 		else:
@@ -279,6 +281,8 @@ class House:
 					if device.attrib['DeviceType'] == 'SEETOUCH_TABLETOP_KEYPAD':
 						newroom.addKeypad(self.parseKeypad(device, newroom))
 					if device.attrib['DeviceType'] == 'VISOR_CONTROL_RECEIVER':
+						newroom.addKeypad(self.parseKeypad(device, newroom))
+					if device.attrib['DeviceType'] == 'PICO_KEYPAD':
 						newroom.addKeypad(self.parseKeypad(device, newroom))
 			self.Rooms.append(newroom)
 
