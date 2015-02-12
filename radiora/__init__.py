@@ -118,11 +118,7 @@ class Controller:
 		id = resp[1]
 		if id in self.integID:
 			output = self.integID[id]
-			if resp[2] == '1':  # zone Set
-				print '[%s] ID %d %-20s %-25s now at %3d' % \
-				  (timestamp(), int(id), output.getRoom().getName(), output.getName(), int(float(resp[3]))), '%'
-			else:
-				print '[%s] Unhandled output' % timestamp(), resp
+			output.log('set', int(float(resp[3])))
 		else:
 			print '[%s] Unhandled output' % timestamp(), resp
 	
@@ -131,13 +127,11 @@ class Controller:
 		if id in self.integID:
 			kp = self.integID[id]
 			if resp[3] == '3':  # button push
-				button = int(resp[2])
-				print '[%s] ID %d %-20s %-25s B%d %s pushed' % \
-				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button).getName() )
+				button = kp.findButton(int(resp[2]))
+				button.log('push', None)
 			elif resp[3] == '9':  # led change
-				button = int(resp[2])-80  # subtract 80 for led offset
-				print '[%s] ID %d %-20s %-25s B%d %-10s led = %d' % \
-				  (timestamp(), int(id), kp.getRoom().getName(), kp.getName(), button, kp.findButton(button).getName(), int(resp[4]))
+				button = kp.findButton(int(resp[2])-80) # subtract 80 for led offset
+				button.log('led', int(resp[4]))
 			elif resp[3] == '4':  # button release
 				return
 			else:
@@ -210,6 +204,14 @@ class Output:
 			level = int(float(response))
 			return level
 		else: return 'No Response'
+	def log(self, action, value):
+		if action == 'set':  # zone Set
+			print '[%s] ID %d %-20s %-25s now at %3d' % \
+			  (timestamp(), int(self.getIntegrationID()), self.getRoom().getName(), self.getName(), value), '%'
+		else:
+			print '[%s] Unhandled output' % timestamp(), action, value
+
+
 
 class Keypad:
 	def __init__(self, Name, IntegrationID, Controller, Room):
@@ -238,9 +240,10 @@ class Keypad:
 	
 
 class Button:
-	def __init__(self, Engraving, Number, IntegrationID, Controller):
+	def __init__(self, Engraving, Number, Keypad, IntegrationID, Controller):
 		print 'Button:', Number, Engraving
 		self.Engraving = Engraving
+		self.Keypad = Keypad
 		self.Number = Number
 		self.IntegrationID = IntegrationID
 		self.Controller = Controller
@@ -256,6 +259,14 @@ class Button:
 		if response:
 			rval = self.Controller.responseParser(response)
 		return rval
+	def log( self, action, value):
+		kp = self.Keypad
+		if action == 'push':
+			print '[%s] ID %d %-20s %-25s B%d %s pushed' % \
+			  (timestamp(), int(self.IntegrationID), kp.getRoom().getName(), kp.getName(), self.Number, self.getName() )
+		elif action == 'led':
+			print '[%s] ID %d %-20s %-25s B%d %-10s led = %d' % \
+			  (timestamp(), int(self.IntegrationID), kp.getRoom().getName(), kp.getName(), self.Number, self.getName(), value)
 
 
 class House:
@@ -296,7 +307,7 @@ class House:
 					name = 'Unnamed Button'		
 					if 'Engraving' in button.attrib:
 						name = button.attrib['Engraving']
-					newkeypad.addButton(number, Button(name, number, newkeypad.getIntegrationID(), self.Controller))
+					newkeypad.addButton(number, Button(name, number, newkeypad, newkeypad.getIntegrationID(), self.Controller))
 		return newkeypad
 
 	def addRoom(self,room):
