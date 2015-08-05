@@ -16,6 +16,7 @@ class TelnetConnection(threading.Thread):
 		self.connected = False
 		self.handler = None
 		self.tn = telnetlib.Telnet(self.host)
+		self.lasttime = datetime.datetime.now()
 	def open(self):
 		self.tn.open(self.host)
 		self.tn.read_until('login: ')
@@ -37,14 +38,23 @@ class TelnetConnection(threading.Thread):
 		if not self.connected:
 			self.openConnection()
 		self.tn.write(string + '\r\n')
+		self.lasttime = datetime.datetime.now()
+	def keepalive(self):
+		if datetime.datetime.now() > self.lasttime + datetime.timedelta( seconds = 60 ):
+			self.send('') 
 	def run(self):
 		while self.connected:
-			response = self.tn.read_until('\r\n', 1)
-			if response:
-				response = response.replace( '\r\n', '' )
-				response = response.replace( 'GNET> ', '' )
-				if self.handler is not None:
-					self.handler(response)
+			self.keepalive()
+			try: 
+				response = self.tn.read_until('\r\n', 1)
+				if response:
+					response = response.replace( '\r\n', '' )
+					response = response.replace( 'GNET> ', '' )
+					if self.handler is not None:
+						self.handler(response)
+			except EOFError:
+				print 'got disconnected'
+				self.connected = False
 
 class Controller:
 	def __init__(self, Hostname, Username, Password, persistConn = False):
@@ -112,26 +122,34 @@ class Controller:
 					return
 	 
 	def handleOutput(self, resp):
-		if resp[2] == '29':   # Skip undocumented output command 
-			return 
-
+		action = resp[2]
 		id = resp[1]
-		if id in self.integID:
-			output = self.integID[id]
-			output.log('set', int(float(resp[3])))
+		if action == '1':   # Set level
+			if id in self.integID:
+				output = self.integID[id]
+				output.log('set', int(float(resp[3])))
+			else:
+				print '[%s] Unhandled output' % timestamp(), resp
+		elif action == '29': # Skip undocumented output command
+			return
+		elif action == '30': # Skip undocumented output command
+			return
 		else:
-			print '[%s] Unhandled output' % timestamp(), resp
+			print '[%s] Unhandled output action' % timestamp(), resp
 	
 	def handleDevice(self, resp):
 		id = resp[1]
 		if id in self.integID:
+			#print '[%s] debug' % timestamp(), resp
 			kp = self.integID[id]
 			if resp[3] == '3':  # button push
 				button = kp.findButton(int(resp[2]))
-				button.log('push', None)
+				if button != None:
+					button.log('push', None)
 			elif resp[3] == '9':  # led change
 				button = kp.findButton(int(resp[2])-80) # subtract 80 for led offset
-				button.log('led', int(resp[4]))
+				if button != None:
+					button.log('led', int(resp[4]))
 			elif resp[3] == '4':  # button release
 				return
 			else:
@@ -147,6 +165,13 @@ class Controller:
 		return self.xmldata
 	def registerIntegId(self, integid, obj):
 		self.integID[integid] = obj
+	def queryDateTime(self):
+		resp = self.sendCommand('?SYSTEM,1')
+		if resp:
+			print '[%s] Controller Date' % timestamp(), resp
+		resp = self.sendCommand('?SYSTEM,2')
+		if resp:
+			print '[%s] Controller Time' % timestamp(), resp
 class Room:
 	def __init__(self, Name, IntegrationID, Controller):
 		print 'Adding Room:', Name
@@ -206,8 +231,8 @@ class Output:
 		else: return 'No Response'
 	def log(self, action, value):
 		if action == 'set':  # zone Set
-			print '[%s] ID %d %-20s %-25s now at %3d' % \
-			  (timestamp(), int(self.getIntegrationID()), self.getRoom().getName(), self.getName(), value), '%'
+			print '[%s] %3s ID %2d %-20s %-25s now at %3d' % \
+			  (timestamp(), '', int(self.getIntegrationID()), self.getRoom().getName(), self.getName(), value), '%'
 		else:
 			print '[%s] Unhandled output' % timestamp(), action, value
 
@@ -262,12 +287,11 @@ class Button:
 	def log( self, action, value):
 		kp = self.Keypad
 		if action == 'push':
-			print '[%s] ID %d %-20s %-25s B%d %s pushed' % \
-			  (timestamp(), int(self.IntegrationID), kp.getRoom().getName(), kp.getName(), self.Number, self.getName() )
+			print '[%s] %3s ID %2d %-20s %-25s B%d %s pushed' % \
+			  (timestamp(), 'EVT', int(self.IntegrationID), kp.getRoom().getName(), kp.getName(), self.Number, self.getName() )
 		elif action == 'led':
-			print '[%s] ID %d %-20s %-25s B%d %-10s led = %d' % \
-			  (timestamp(), int(self.IntegrationID), kp.getRoom().getName(), kp.getName(), self.Number, self.getName(), value)
-
+			print '[%s] %3s ID %2d %-20s %-25s B%d %-11s led = %d' % \
+			  (timestamp(), '', int(self.IntegrationID), kp.getRoom().getName(), kp.getName(), self.Number, self.getName(), value)
 
 class House:
 	def __init__(self, Controller, Name = 'House'):
@@ -330,6 +354,7 @@ class House:
 			roomlist.append(room.getName())
 		return roomlist
 	def getStatus(self):
+		self.Controller.queryDateTime()
 		for room in self.Rooms:
 			for output in room.getOutputs():
 				#print output.getName(),': ', output.Get(), '%'
